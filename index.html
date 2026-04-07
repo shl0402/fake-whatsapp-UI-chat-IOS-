@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local WhatsApp Mockup Editor V10.1</title>
+  <title>Local WhatsApp Mockup Editor V13</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -140,6 +140,119 @@
         a.click();
       };
 
+      // --- UPDATED: Export TWO Viewer HTMLs ---
+      const exportViewerHTML = () => {
+        const mockupNode = document.getElementById('mockup-container');
+        if (!mockupNode) return;
+        
+        // ----------------------------------------------------
+        // 1. STANDARD INTERACTIVE VERSION (whatsapp-interactive.html)
+        // ----------------------------------------------------
+        const cloneStd = mockupNode.cloneNode(true);
+        
+        const htmlStd = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>${config.chatName} - Chat</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f3f4f6; 
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .wa-bg {
+      background-color: #E5DDD5;
+      background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+      background-size: cover;
+      background-blend-mode: multiply;
+    }
+    @media (max-width: 450px) {
+      #mockup-container {
+        transform: scale(0.85);
+        transform-origin: top center;
+      }
+    }
+  </style>
+</head>
+<body>
+  ${cloneStd.outerHTML}
+</body>
+</html>`;
+
+        const blobStd = new Blob([htmlStd], { type: 'text/html' });
+        const urlStd = URL.createObjectURL(blobStd);
+        const aStd = document.createElement('a');
+        aStd.href = urlStd;
+        aStd.download = 'whatsapp-interactive.html';
+        aStd.click();
+
+        // ----------------------------------------------------
+        // 2. VERY LONG PHONE CAPTURE VERSION (whatsapp-full-capture.html)
+        // ----------------------------------------------------
+        const cloneLong = mockupNode.cloneNode(true);
+        
+        // Remove fixed height and replace it with h-auto and a min-height
+        cloneLong.className = cloneLong.className.replace('h-[852px]', 'h-auto min-h-[852px]');
+        
+        // Find the chat body inside the clone and remove the scroll lock
+        const chatBody = cloneLong.querySelector('.overflow-y-auto');
+        if (chatBody) {
+            chatBody.className = chatBody.className.replace('overflow-y-auto', 'overflow-visible');
+        }
+
+        const htmlLong = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${config.chatName} - Full Capture</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f3f4f6; 
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      padding: 40px 20px; /* Gives nice spacing at top and bottom of the long phone */
+      box-sizing: border-box;
+      min-height: 100vh;
+    }
+    .wa-bg {
+      background-color: #E5DDD5;
+      background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+      /* Switched to repeating tile instead of cover so it doesn't stretch horribly on long phones */
+      background-size: 400px auto;
+      background-repeat: repeat;
+      background-blend-mode: multiply;
+    }
+  </style>
+</head>
+<body>
+  ${cloneLong.outerHTML}
+</body>
+</html>`;
+
+        // Slight delay so the browser allows both downloads
+        setTimeout(() => {
+          const blobLong = new Blob([htmlLong], { type: 'text/html' });
+          const urlLong = URL.createObjectURL(blobLong);
+          const aLong = document.createElement('a');
+          aLong.href = urlLong;
+          aLong.download = 'whatsapp-full-capture.html';
+          aLong.click();
+        }, 500);
+      };
+
       const importData = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -245,14 +358,17 @@
             
             {/* Header with Import/Export Buttons */}
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup Editor V10.1</h1>
-              <div className="flex space-x-3">
-                <label className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg shadow-sm text-sm font-semibold cursor-pointer hover:bg-blue-200 transition-colors">
+              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup Editor V13</h1>
+              <div className="flex space-x-2">
+                <label className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold cursor-pointer hover:bg-gray-200 transition-colors">
                   Import JSON
                   <input type="file" accept=".json" onChange={importData} className="hidden" />
                 </label>
-                <button onClick={exportData} className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-700 transition-colors">
+                <button onClick={exportData} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-200 transition-colors">
                   Export JSON
+                </button>
+                <button onClick={exportViewerHTML} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-700 transition-colors">
+                  Export HTML
                 </button>
               </div>
             </div>
@@ -416,12 +532,13 @@
 
           {/* RIGHT PANE: Live Preview */}
           <div className="w-1/2 p-6 bg-[#d1d5db] flex justify-center items-center overflow-y-auto">
-            <div className="w-[393px] h-[852px] bg-white rounded-[3rem] shadow-2xl border-[12px] border-black flex flex-col relative overflow-hidden ring-1 ring-gray-900/10">
+            {/* Added id="mockup-container" so the export script can find it */}
+            <div id="mockup-container" className="w-[393px] h-[852px] bg-white rounded-[3rem] shadow-2xl border-[12px] border-black flex flex-col relative overflow-hidden ring-1 ring-gray-900/10">
               
               {/* iOS Status Bar */}
-              <div className="h-12 bg-[#F6F6F6] text-black pl-8 pr-[22px] flex justify-between items-center text-[15px] font-semibold z-10 pt-2">
+              <div className="h-12 bg-[#F6F6F6] text-black pl-8 pr-[22px] flex justify-between items-center text-[15px] font-semibold z-10 pt-2 shrink-0">
                 <span>{config.osTime}</span>
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[120px] h-[30px] bg-black rounded-full"></div>
+                <div id="notch-placeholder" className="absolute top-2 left-1/2 -translate-x-1/2 w-[120px] h-[30px] bg-black rounded-full"></div>
                 <div className="flex items-center space-x-[4px]">
                   <Icons.Cellular />
                   {config.networkType && <span className="text-[12px] font-bold">{config.networkType}</span>}
@@ -430,7 +547,7 @@
               </div>
 
               {/* WhatsApp Header */}
-              <div className="bg-[#F6F6F6] border-b border-gray-300 px-1 py-2 flex items-center justify-between z-10 relative shadow-sm">
+              <div className="bg-[#F6F6F6] border-b border-gray-300 px-1 py-2 flex items-center justify-between z-10 relative shadow-sm shrink-0">
                 <div className="flex items-center cursor-pointer">
                   <div className="flex items-center text-[#007AFF] px-1">
                     <Icons.ChevronLeft />
@@ -576,7 +693,7 @@
                           </div>
                         )}
 
-                        {/* Message Bubble Wrapper */}
+                        {/* Message Bubble Wrapper - All 4 corners rounded */}
                         <div className={`max-w-[75%] relative flex flex-col ${msg.isSticker ? 'bg-transparent' : (isMe ? 'bg-[#DCF7C5]' : 'bg-white')} ${!msg.isSticker ? `shadow-sm rounded-[12px] ${bubblePadding}` : ''}`}>
                           
                           {/* Dynamic Colored Name Header */}
@@ -650,7 +767,7 @@
               </div>
 
               {/* Input Area */}
-              <div className="h-[85px] bg-[#F6F6F6] border-t border-gray-300 flex items-start pt-2 px-3 space-x-3 z-10 pb-8">
+              <div className="h-[85px] bg-[#F6F6F6] border-t border-gray-300 flex items-start pt-2 px-3 space-x-3 z-10 pb-8 shrink-0">
                 <div className="mt-1">
                   <Icons.Plus />
                 </div>
