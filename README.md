@@ -1,5 +1,7 @@
 # 💬 Local WhatsApp Mockup Editor (iOS Edition)
 
+**👉 [Try it live in your browser here!](https://shl0402.github.io/fake-whatsapp-UI-chat-IOS-/) 👈**
+
 A completely local, zero-install, single-file web application for generating pixel-perfect, highly authentic iOS WhatsApp chat mockups. 
 
 Built with React and Tailwind CSS, this tool runs entirely in your browser without any backend server. Everything stays on your local machine, ensuring complete privacy.
@@ -12,7 +14,7 @@ Built with React and Tailwind CSS, this tool runs entirely in your browser witho
 
 ## ✨ Key Features
 
-* **Zero Setup:** It’s just one `index.html` file. No `npm install`, no build steps, no servers. Just double-click and open it in Chrome/Safari.
+* **Zero Setup:** It’s just one `index.html` file. No installations, no build steps, no servers. Just open it and start creating.
 * **Pixel-Perfect iOS UI:** Features the iOS status bar, Dynamic Island/Notch, precise Apple system fonts, native WhatsApp color palettes, read-receipt ticks, and the authentic chat background.
 * **Dark & Light Themes:** Instantly toggle between authentic iOS light mode and OLED-optimized dark mode (complete with the subtle doodle background blend).
 * **Smart Message Grouping:** Automatically hides consecutive avatars, names, and bubble tails just like the real app.
@@ -27,14 +29,14 @@ Built with React and Tailwind CSS, this tool runs entirely in your browser witho
 
 ## 💾 Saving & Sharing
 
-Because this app has no backend, it uses **Base64 Encoding** to save your work. 
+Because this app has no backend, it uses **Base64 Encoding** to save your work locally. 
 
 * **Export JSON:** Saves your current chat configuration, messages, and uploaded photos (encoded directly into text) as a `.json` file.
 * **Import JSON:** Upload a previously saved `.json` file to instantly pick up exactly where you left off.
 * **Unsafe Changes Safeguard:** Warns you if you try to close the tab or refresh without exporting your latest changes.
 
 ### 📤 Export HTML Formats
-When you are ready to share your mockup, click **Export HTML** to choose from three standalone, read-only `.html` files. All images and settings are permanently "baked" into the file so they can be easily shared or hosted (e.g., on Netlify or GitHub Pages).
+When you are ready to share your mockup, click **Export HTML** to choose from three standalone, read-only `.html` files. All images and settings are permanently "baked" into the file so they can be easily shared or hosted anywhere!
 
 **1. Interactive Scroll**
 A fixed-size iPhone frame centered on the screen. Users can physically scroll *inside* the phone to read the chat. Perfect for hosting on a free site and sharing via QR code.
@@ -47,8 +49,8 @@ Automatically measures your chat and breaks it into uniform, side-by-side screen
 
 ## 🚀 How to Use
 
-1. **Get the Code:** Download or clone the repository. Alternatively, since the app is entirely self-contained, you can simply copy the raw code from `index.html`, paste it into a blank text file on your computer, and save it as `index.html` (the other files in this repository are just examples!).
-2. **Open the App:** Double-click your `index.html` file to open it in any web browser.
+1. **Use the Live Link:** Just click the link at the top of this page to use the app instantly! 
+2. **Or Run Locally:** Since the app is entirely self-contained, you can simply copy the raw code from `index.html`, paste it into a blank text file on your computer, save it as `index.html`, and double-click it to open in any web browser.
 3. **Customize:** Use the left panel to configure the chat header, time, battery/network status, and add messages.
 4. **Reorder:** Toggle "Collapse All" to easily drag-and-drop messages into your preferred order.
 5. **Preview:** Watch the right panel update live.
