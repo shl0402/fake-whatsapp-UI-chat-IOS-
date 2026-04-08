@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local WhatsApp Mockup Editor V20</title>
+  <title>Local WhatsApp Mockup Editor V21</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -129,34 +129,89 @@
         }
       ]);
 
+      // --- NEW: Unsaved Changes Tracker ---
+      const [lastSavedState, setLastSavedState] = useState('');
+      
+      // Initialize save state snapshot once on load
+      useEffect(() => {
+        setLastSavedState(JSON.stringify({config, messages}));
+      }, []);
+
+      // Warn before closing tab if unsaved changes exist
+      useEffect(() => {
+        const handleBeforeUnload = (e) => {
+          const currentState = JSON.stringify({config, messages});
+          if (currentState !== lastSavedState) {
+            e.preventDefault();
+            e.returnValue = ''; // Required for browser prompt
+          }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+      }, [config, messages, lastSavedState]);
+
+
       // --- UI States ---
       const [isCollapsed, setIsCollapsed] = useState(false);
 
-      // --- Drag & Drop States ---
+      // --- Drag & Drop States & Refs ---
       const [draggableId, setDraggableId] = useState(null);
       const [draggedIdx, setDraggedIdx] = useState(null);
       const [dragOverIdx, setDragOverIdx] = useState(null);
+      
+      const editorPaneRef = useRef(null);
+      const scrollIntervalId = useRef(null);
 
-      // --- Modal / Preflight State ---
-      const [showExportModal, setShowExportModal] = useState(false);
-      const [showStoryboardPreflight, setShowStoryboardPreflight] = useState(false);
-      const [storyboardPages, setStoryboardPages] = useState([]);
-      const previewContainerRef = useRef(null);
+      const clearAutoScroll = () => {
+        if (scrollIntervalId.current) {
+          clearInterval(scrollIntervalId.current);
+          scrollIntervalId.current = null;
+        }
+      };
+
+      // Handles autoscrolling when dragging near top/bottom of editor
+      const handlePaneDragOver = (e) => {
+        e.preventDefault(); 
+        const pane = editorPaneRef.current;
+        if (!pane || draggedIdx === null) return;
+
+        const threshold = 100; // Trigger scroll if within 100px of top/bottom
+        const rect = pane.getBoundingClientRect();
+        
+        if (e.clientY < rect.top + threshold) {
+          // Near Top - Scroll Up
+          if (!scrollIntervalId.current) {
+            scrollIntervalId.current = setInterval(() => {
+              pane.scrollTop -= 15;
+            }, 20);
+          }
+        } else if (e.clientY > rect.bottom - threshold) {
+          // Near Bottom - Scroll Down
+          if (!scrollIntervalId.current) {
+            scrollIntervalId.current = setInterval(() => {
+              pane.scrollTop += 15;
+            }, 20);
+          }
+        } else {
+          // In the middle, stop scrolling
+          clearAutoScroll();
+        }
+      };
 
       const handleDragStart = (e, index) => {
         setDraggedIdx(index);
         e.dataTransfer.effectAllowed = 'move';
-        // Need to set data to allow dragging in some browsers
         e.dataTransfer.setData('text/plain', index);
       };
 
-      const handleDragOver = (e, index) => {
+      const handleItemDragOver = (e, index) => {
         e.preventDefault();
         setDragOverIdx(index);
       };
 
       const handleDrop = (e, dropIndex) => {
         e.preventDefault();
+        clearAutoScroll();
         if (draggedIdx === null || draggedIdx === dropIndex) {
           setDragOverIdx(null);
           return;
@@ -172,11 +227,13 @@
       };
 
       const handleDragEnd = () => {
+        clearAutoScroll();
         setDraggedIdx(null);
         setDragOverIdx(null);
         setDraggableId(null);
       };
 
+      // --- File Actions ---
       const handleImageUpload = (e, callback) => {
         const file = e.target.files[0];
         if (file) {
@@ -191,6 +248,10 @@
       const exportDataJSON = () => {
         const data = { config, messages };
         const dataStr = JSON.stringify(data, null, 2);
+        
+        // Update the "Saved" snapshot
+        setLastSavedState(dataStr);
+        
         const blob = new Blob([dataStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -208,6 +269,9 @@
             const data = JSON.parse(event.target.result);
             if (data.config) setConfig({...config, ...data.config}); 
             if (data.messages) setMessages(data.messages);
+            
+            // Update the "Saved" snapshot to match imported data
+            setLastSavedState(JSON.stringify(data));
           } catch (err) {
             alert('Invalid JSON file format.');
           }
@@ -215,8 +279,13 @@
         reader.readAsText(file);
       };
 
+      // --- Modal / Preflight State ---
+      const [showExportModal, setShowExportModal] = useState(false);
+      const [showStoryboardPreflight, setShowStoryboardPreflight] = useState(false);
+      const [storyboardPages, setStoryboardPages] = useState([]);
+      const previewContainerRef = useRef(null);
+
       // --- EXPORT GENERATORS ---
-      
       const generateInteractiveHTML = () => {
         const mockupNode = document.getElementById('mockup-container');
         if (!mockupNode) return;
@@ -312,7 +381,6 @@
         const sourceContainer = document.getElementById('scale-wrapper');
         if (!sourceContainer) return;
         
-        // Convert React nodes to raw HTML strings for the preview
         const rawMessageHTMLs = Array.from(sourceContainer.children).map(node => ({
             html: node.outerHTML,
             height: node.offsetHeight + parseInt(window.getComputedStyle(node).marginTop || 0)
@@ -348,7 +416,6 @@
         const headerHTML = cloneStory.children[1].outerHTML;
         const footerHTML = cloneStory.children[3].outerHTML;
 
-        // Build the HTML template
         const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -557,12 +624,17 @@
             </div>
           )}
 
-          {/* LEFT PANE: Editor */}
-          <div className="w-1/2 p-6 bg-white overflow-y-auto border-r border-gray-300 shadow-lg z-20">
+          {/* LEFT PANE: Editor (NOW WITH AUTO-SCROLL ON DRAG OVER) */}
+          <div 
+            ref={editorPaneRef}
+            onDragOver={handlePaneDragOver}
+            onDragLeave={clearAutoScroll}
+            className="w-1/2 p-6 bg-white overflow-y-auto border-r border-gray-300 shadow-lg z-20"
+          >
             
             {/* Header with Import/Export Buttons */}
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup V20</h1>
+              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup V21</h1>
               <div className="flex space-x-2">
                 <label className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold cursor-pointer hover:bg-gray-200 transition-colors">
                   Import JSON
@@ -644,7 +716,7 @@
                     key={msg.id} 
                     draggable={draggableId === msg.id}
                     onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragOver={(e) => handleItemDragOver(e, index)}
                     onDrop={(e) => handleDrop(e, index)}
                     onDragEnd={handleDragEnd}
                     className={`mb-4 rounded-xl relative transition-all duration-200 ${
