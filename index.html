@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local WhatsApp Mockup Editor V13</title>
+  <title>Local WhatsApp Mockup Editor V20</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -28,7 +28,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState } = React;
+    const { useState, useEffect, useRef } = React;
 
     // --- Authentic WhatsApp Group Colors ---
     const WA_COLORS = [
@@ -88,6 +88,16 @@
           <rect x="2" y="2" width="18" height="8" rx="2" fill="currentColor"/>
           <path d="M23 4.5C23.5523 4.5 24 4.94772 24 5.5V6.5C24 7.05228 23.5523 7.5 23 7.5" fill="currentColor"/>
         </svg>
+      ),
+      DragHandle: () => (
+        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"></line>
+          <line x1="8" y1="12" x2="21" y2="12"></line>
+          <line x1="8" y1="18" x2="21" y2="18"></line>
+          <circle cx="4" cy="6" r="1"></circle>
+          <circle cx="4" cy="12" r="1"></circle>
+          <circle cx="4" cy="18" r="1"></circle>
+        </svg>
       )
     };
 
@@ -100,6 +110,7 @@
         chatType: 'group',
         members: 'Timothy, Samuel, ...',
         groupIcon: '',
+        chatScale: 1.0, 
       });
 
       const [messages, setMessages] = useState([
@@ -118,6 +129,54 @@
         }
       ]);
 
+      // --- UI States ---
+      const [isCollapsed, setIsCollapsed] = useState(false);
+
+      // --- Drag & Drop States ---
+      const [draggableId, setDraggableId] = useState(null);
+      const [draggedIdx, setDraggedIdx] = useState(null);
+      const [dragOverIdx, setDragOverIdx] = useState(null);
+
+      // --- Modal / Preflight State ---
+      const [showExportModal, setShowExportModal] = useState(false);
+      const [showStoryboardPreflight, setShowStoryboardPreflight] = useState(false);
+      const [storyboardPages, setStoryboardPages] = useState([]);
+      const previewContainerRef = useRef(null);
+
+      const handleDragStart = (e, index) => {
+        setDraggedIdx(index);
+        e.dataTransfer.effectAllowed = 'move';
+        // Need to set data to allow dragging in some browsers
+        e.dataTransfer.setData('text/plain', index);
+      };
+
+      const handleDragOver = (e, index) => {
+        e.preventDefault();
+        setDragOverIdx(index);
+      };
+
+      const handleDrop = (e, dropIndex) => {
+        e.preventDefault();
+        if (draggedIdx === null || draggedIdx === dropIndex) {
+          setDragOverIdx(null);
+          return;
+        }
+        const newMessages = [...messages];
+        const draggedMsg = newMessages[draggedIdx];
+        newMessages.splice(draggedIdx, 1);
+        newMessages.splice(dropIndex, 0, draggedMsg);
+        setMessages(newMessages);
+        setDraggedIdx(null);
+        setDragOverIdx(null);
+        setDraggableId(null);
+      };
+
+      const handleDragEnd = () => {
+        setDraggedIdx(null);
+        setDragOverIdx(null);
+        setDraggableId(null);
+      };
+
       const handleImageUpload = (e, callback) => {
         const file = e.target.files[0];
         if (file) {
@@ -129,7 +188,7 @@
         }
       };
 
-      const exportData = () => {
+      const exportDataJSON = () => {
         const data = { config, messages };
         const dataStr = JSON.stringify(data, null, 2);
         const blob = new Blob([dataStr], { type: 'application/json' });
@@ -140,22 +199,34 @@
         a.click();
       };
 
-      // --- UPDATED: Export TWO Viewer HTMLs ---
-      const exportViewerHTML = () => {
+      const importData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = JSON.parse(event.target.result);
+            if (data.config) setConfig({...config, ...data.config}); 
+            if (data.messages) setMessages(data.messages);
+          } catch (err) {
+            alert('Invalid JSON file format.');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      // --- EXPORT GENERATORS ---
+      
+      const generateInteractiveHTML = () => {
         const mockupNode = document.getElementById('mockup-container');
         if (!mockupNode) return;
-        
-        // ----------------------------------------------------
-        // 1. STANDARD INTERACTIVE VERSION (whatsapp-interactive.html)
-        // ----------------------------------------------------
-        const cloneStd = mockupNode.cloneNode(true);
-        
-        const htmlStd = `<!DOCTYPE html>
+        const clone = mockupNode.cloneNode(true);
+        const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>${config.chatName} - Chat</title>
+  <title>${config.chatName} - Interactive</title>
   <script src="https://cdn.tailwindcss.com"><\/script>
   <style>
     body {
@@ -176,44 +247,33 @@
       background-blend-mode: multiply;
     }
     @media (max-width: 450px) {
-      #mockup-container {
-        transform: scale(0.85);
-        transform-origin: top center;
-      }
+      #mockup-container { transform: scale(0.85); transform-origin: top center; }
     }
   </style>
 </head>
-<body>
-  ${cloneStd.outerHTML}
-</body>
+<body>${clone.outerHTML}</body>
 </html>`;
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'whatsapp-interactive.html';
+        a.click();
+        setShowExportModal(false);
+      };
 
-        const blobStd = new Blob([htmlStd], { type: 'text/html' });
-        const urlStd = URL.createObjectURL(blobStd);
-        const aStd = document.createElement('a');
-        aStd.href = urlStd;
-        aStd.download = 'whatsapp-interactive.html';
-        aStd.click();
+      const generateLongCaptureHTML = () => {
+        const mockupNode = document.getElementById('mockup-container');
+        if (!mockupNode) return;
+        const clone = mockupNode.cloneNode(true);
+        clone.className = clone.className.replace('h-[852px]', 'h-auto min-h-[852px]');
+        const chatBody = clone.querySelector('.overflow-y-auto');
+        if (chatBody) chatBody.className = chatBody.className.replace('overflow-y-auto', 'overflow-visible');
 
-        // ----------------------------------------------------
-        // 2. VERY LONG PHONE CAPTURE VERSION (whatsapp-full-capture.html)
-        // ----------------------------------------------------
-        const cloneLong = mockupNode.cloneNode(true);
-        
-        // Remove fixed height and replace it with h-auto and a min-height
-        cloneLong.className = cloneLong.className.replace('h-[852px]', 'h-auto min-h-[852px]');
-        
-        // Find the chat body inside the clone and remove the scroll lock
-        const chatBody = cloneLong.querySelector('.overflow-y-auto');
-        if (chatBody) {
-            chatBody.className = chatBody.className.replace('overflow-y-auto', 'overflow-visible');
-        }
-
-        const htmlLong = `<!DOCTYPE html>
+        const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${config.chatName} - Full Capture</title>
   <script src="https://cdn.tailwindcss.com"><\/script>
   <style>
@@ -223,14 +283,93 @@
       margin: 0;
       display: flex;
       justify-content: center;
-      padding: 40px 20px; /* Gives nice spacing at top and bottom of the long phone */
+      padding: 40px 20px;
       box-sizing: border-box;
       min-height: 100vh;
     }
     .wa-bg {
       background-color: #E5DDD5;
       background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-      /* Switched to repeating tile instead of cover so it doesn't stretch horribly on long phones */
+      background-size: 400px auto;
+      background-repeat: repeat;
+      background-blend-mode: multiply;
+    }
+  </style>
+</head>
+<body>${clone.outerHTML}</body>
+</html>`;
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'whatsapp-full-capture.html';
+        a.click();
+        setShowExportModal(false);
+      };
+
+      // --- STORYBOARD PREFLIGHT LOGIC ---
+      const calculateStoryboardPages = () => {
+        const sourceContainer = document.getElementById('scale-wrapper');
+        if (!sourceContainer) return;
+        
+        // Convert React nodes to raw HTML strings for the preview
+        const rawMessageHTMLs = Array.from(sourceContainer.children).map(node => ({
+            html: node.outerHTML,
+            height: node.offsetHeight + parseInt(window.getComputedStyle(node).marginTop || 0)
+        }));
+
+        const pages = [];
+        let currentPage = [];
+        let currentHeight = 0;
+        const MAX_HEIGHT = 640 / config.chatScale; 
+
+        rawMessageHTMLs.forEach(msg => {
+            if (currentHeight + msg.height > MAX_HEIGHT && currentPage.length > 0) {
+                pages.push([...currentPage]);
+                currentPage = [msg.html];
+                currentHeight = msg.height;
+            } else {
+                currentPage.push(msg.html);
+                currentHeight += msg.height;
+            }
+        });
+        if (currentPage.length > 0) pages.push(currentPage);
+        
+        setStoryboardPages(pages);
+        setShowExportModal(false);
+        setShowStoryboardPreflight(true);
+      };
+
+      const downloadStoryboardHTML = () => {
+        const mockupNode = document.getElementById('mockup-container');
+        if (!mockupNode) return;
+        const cloneStory = mockupNode.cloneNode(true);
+        const statusBarHTML = cloneStory.children[0].outerHTML.replace('id="notch-placeholder"', 'style="display:none;"');
+        const headerHTML = cloneStory.children[1].outerHTML;
+        const footerHTML = cloneStory.children[3].outerHTML;
+
+        // Build the HTML template
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${config.chatName} - Storyboard</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f3f4f6; 
+      margin: 0;
+      display: flex;
+      padding: 40px;
+      gap: 32px;
+      overflow-x: auto;
+      min-height: 100vh;
+      align-items: center;
+    }
+    .wa-bg {
+      background-color: #E5DDD5;
+      background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
       background-size: 400px auto;
       background-repeat: repeat;
       background-blend-mode: multiply;
@@ -238,35 +377,28 @@
   </style>
 </head>
 <body>
-  ${cloneLong.outerHTML}
+    ${storyboardPages.map(pageMsgs => `
+      <div class="w-[393px] h-[852px] bg-white rounded-[24px] border-4 border-gray-300 flex flex-col relative overflow-hidden shadow-md shrink-0">
+        ${statusBarHTML}
+        ${headerHTML}
+        <div class="flex-1 pl-1 pr-3 pt-3 pb-20 relative wa-bg overflow-hidden">
+            <div style="transform: scale(${config.chatScale}); transform-origin: top left; width: ${100/config.chatScale}%;">
+                ${pageMsgs.join('')}
+            </div>
+        </div>
+        ${footerHTML}
+      </div>
+    `).join('')}
 </body>
 </html>`;
 
-        // Slight delay so the browser allows both downloads
-        setTimeout(() => {
-          const blobLong = new Blob([htmlLong], { type: 'text/html' });
-          const urlLong = URL.createObjectURL(blobLong);
-          const aLong = document.createElement('a');
-          aLong.href = urlLong;
-          aLong.download = 'whatsapp-full-capture.html';
-          aLong.click();
-        }, 500);
-      };
-
-      const importData = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          try {
-            const data = JSON.parse(event.target.result);
-            if (data.config) setConfig(data.config);
-            if (data.messages) setMessages(data.messages);
-          } catch (err) {
-            alert('Invalid JSON file format.');
-          }
-        };
-        reader.readAsText(file);
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'whatsapp-storyboard.html';
+        a.click();
+        setShowStoryboardPreflight(false);
       };
 
       const addMessage = (type) => {
@@ -353,21 +485,93 @@
 
       return (
         <div className="flex h-screen bg-gray-100">
+          
+          {/* --- EXPORT MODAL --- */}
+          {showExportModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+                    <h3 className="text-xl font-bold mb-4 text-gray-800">Export HTML Format</h3>
+                    <p className="text-gray-600 mb-6 text-sm">Choose how you want your mockup to be displayed in the exported file.</p>
+                    
+                    <div className="space-y-3">
+                        <button onClick={generateInteractiveHTML} className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col group">
+                            <span className="font-bold text-gray-800 group-hover:text-blue-700">📱 Interactive Scroll</span>
+                            <span className="text-xs text-gray-500 mt-1">Standard iPhone frame. Scroll inside to read.</span>
+                        </button>
+                        <button onClick={generateLongCaptureHTML} className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-all flex flex-col group">
+                            <span className="font-bold text-gray-800 group-hover:text-blue-700">📏 Full Length Capture</span>
+                            <span className="text-xs text-gray-500 mt-1">One very long screen. Best for screenshot extensions.</span>
+                        </button>
+                        <button onClick={calculateStoryboardPages} className="w-full text-left p-4 rounded-xl border border-gray-200 hover:border-purple-500 hover:bg-purple-50 transition-all flex flex-col group">
+                            <span className="font-bold text-gray-800 group-hover:text-purple-700">📖 Paginated Storyboard</span>
+                            <span className="text-xs text-gray-500 mt-1">Side-by-side screens. Best for presentations.</span>
+                        </button>
+                    </div>
+
+                    <button onClick={() => setShowExportModal(false)} className="mt-6 w-full py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium transition-colors">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+          )}
+
+          {/* --- STORYBOARD PREFLIGHT OVERLAY --- */}
+          {showStoryboardPreflight && (
+            <div className="fixed inset-0 z-50 flex flex-col bg-gray-900">
+                <div className="bg-white p-4 flex justify-between items-center shadow-md z-10 shrink-0">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-800">Storyboard Preview</h3>
+                        <p className="text-sm text-gray-500">Global Scale: {config.chatScale}x. Check page breaks below.</p>
+                    </div>
+                    <div className="space-x-3">
+                        <button onClick={() => setShowStoryboardPreflight(false)} className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">
+                            Back to Editor
+                        </button>
+                        <button onClick={downloadStoryboardHTML} className="bg-purple-600 text-white px-4 py-2 rounded-lg shadow-sm font-semibold hover:bg-purple-700 transition-colors">
+                            Download HTML
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Horizontal Scrolling Preview Area */}
+                <div className="flex-1 overflow-auto bg-gray-900 flex items-start gap-8 p-8" ref={previewContainerRef}>
+                    {storyboardPages.map((pageMsgs, idx) => (
+                        <div key={idx} className="relative shrink-0" style={{ width: '294.75px', height: '639px' }}>
+                            <div className="absolute top-0 left-0 w-[393px] h-[852px] bg-white rounded-[24px] border-4 border-gray-300 flex flex-col overflow-hidden shadow-2xl" style={{ transform: 'scale(0.75)', transformOrigin: 'top left' }}>
+                                {/* Dummy Status Bar & Header for preview visual */}
+                                <div className="h-12 bg-[#F6F6F6] text-black pl-8 pr-[22px] flex justify-between items-center text-[15px] font-semibold z-10 pt-2 shrink-0">
+                                    <span>{config.osTime}</span><div className="flex space-x-[4px]"><Icons.Cellular/><Icons.Battery/></div>
+                                </div>
+                                <div className="bg-[#F6F6F6] border-b border-gray-300 px-1 py-2 flex items-center justify-between z-10 shadow-sm shrink-0">
+                                    <div className="flex items-center"><div className="flex px-1 text-[#007AFF]"><Icons.ChevronLeft/></div><div className="w-10 h-10 bg-gray-300 rounded-full mr-3 overflow-hidden">{config.groupIcon && <img src={config.groupIcon} className="w-full h-full object-cover" />}</div><div className="flex flex-col"><span className="font-semibold text-[16px] text-black">{config.chatName}</span></div></div>
+                                </div>
+                                {/* The scaled page content */}
+                                <div className="flex-1 pl-1 pr-3 pt-3 pb-20 relative wa-bg overflow-hidden pointer-events-none">
+                                    <div style={{ transform: `scale(${config.chatScale})`, transformOrigin: 'top left', width: `${100/config.chatScale}%` }}
+                                         dangerouslySetInnerHTML={{ __html: pageMsgs.join('') }} />
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+          )}
+
           {/* LEFT PANE: Editor */}
           <div className="w-1/2 p-6 bg-white overflow-y-auto border-r border-gray-300 shadow-lg z-20">
             
             {/* Header with Import/Export Buttons */}
             <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup Editor V13</h1>
+              <h1 className="text-2xl font-bold text-gray-800">WhatsApp Mockup V20</h1>
               <div className="flex space-x-2">
                 <label className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold cursor-pointer hover:bg-gray-200 transition-colors">
                   Import JSON
                   <input type="file" accept=".json" onChange={importData} className="hidden" />
                 </label>
-                <button onClick={exportData} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-200 transition-colors">
+                <button onClick={exportDataJSON} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-200 transition-colors">
                   Export JSON
                 </button>
-                <button onClick={exportViewerHTML} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-700 transition-colors">
+                <button onClick={() => setShowExportModal(true)} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg shadow-sm text-sm font-semibold hover:bg-blue-700 transition-colors">
                   Export HTML
                 </button>
               </div>
@@ -396,128 +600,216 @@
                   <label className="block text-sm font-medium text-gray-600 mb-1">Subtitle / Members</label>
                   <input type="text" value={config.members} onChange={e => setConfig({...config, members: e.target.value})} className="w-full border p-2 rounded" />
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Group Profile Icon</label>
-                  <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (url) => setConfig({...config, groupIcon: url}))} className="w-full border p-2 rounded bg-white" />
+                <div className="col-span-2 flex space-x-4">
+                  <div className="w-1/2">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">Group Profile Icon</label>
+                    <input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, (url) => setConfig({...config, groupIcon: url}))} className="w-full border p-2 rounded bg-white" />
+                  </div>
+                  <div className="w-1/2">
+                    <label className="block text-sm font-medium text-blue-600 mb-1">Global Chat Scale: {config.chatScale}x</label>
+                    <input 
+                      type="range" 
+                      min="0.5" max="1.5" step="0.05" 
+                      value={config.chatScale || 1.0} 
+                      onChange={e => setConfig({...config, chatScale: parseFloat(e.target.value)})} 
+                      className="w-full mt-2" 
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
             <div>
-              {/* Top Add Buttons */}
+              {/* Top Add Buttons & Collapse Toggle */}
               <div className="flex justify-between items-center mb-4">
                 <h2 className="font-bold text-lg text-gray-700">Messages</h2>
-                <div className="space-x-2">
+                <div className="flex space-x-2 items-center">
+                  <button onClick={() => setIsCollapsed(!isCollapsed)} className="bg-purple-100 border border-purple-300 text-purple-800 px-3 py-1 rounded shadow-sm text-sm font-medium mr-2">
+                    {isCollapsed ? 'Expand All' : 'Collapse All'}
+                  </button>
                   <button onClick={() => addMessage('me')} className="bg-[#DCF7C5] border border-green-300 text-green-800 px-3 py-1 rounded shadow-sm text-sm font-medium">+ Add Me</button>
                   <button onClick={() => addMessage('other')} className="bg-gray-200 border border-gray-300 text-gray-800 px-3 py-1 rounded shadow-sm text-sm font-medium">+ Add Other</button>
                 </div>
               </div>
 
-              {messages.map((msg, index) => (
-                <div key={msg.id} className="p-4 mb-4 border rounded-xl bg-gray-50 relative">
-                  <button onClick={() => deleteMessage(msg.id)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-bold">✕ Remove</button>
-                  <div className="flex space-x-2 items-center mb-2 flex-wrap gap-y-2 pr-16">
-                    <span className="font-bold text-sm text-gray-700 w-24 shrink-0">Msg {index + 1} ({msg.sender === 'me' ? 'You' : 'Other'})</span>
-                    
-                    {msg.sender === 'other' && (
-                      <input 
-                        type="text" 
-                        placeholder="Sender Name" 
-                        value={msg.senderName}
-                        onChange={(e) => {
-                          const newMsgs = [...messages];
-                          newMsgs[index].senderName = e.target.value;
-                          setMessages(newMsgs);
-                        }}
-                        className="flex-1 border p-1 rounded text-sm font-semibold min-w-[100px]"
-                        style={{ color: getColorForUser(msg.senderName) }} 
-                      />
+              {/* DRAGGABLE MESSAGES LIST */}
+              {messages.map((msg, index) => {
+                const isDragged = draggedIdx === index;
+                const isDragOver = dragOverIdx === index;
+                const isDraggingDown = draggedIdx !== null && dragOverIdx !== null && draggedIdx < dragOverIdx;
+                const isDraggingUp = draggedIdx !== null && dragOverIdx !== null && draggedIdx > dragOverIdx;
+
+                return (
+                  <div 
+                    key={msg.id} 
+                    draggable={draggableId === msg.id}
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDrop={(e) => handleDrop(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={`mb-4 rounded-xl relative transition-all duration-200 ${
+                      isDragged ? 'opacity-40 bg-gray-200 border-dashed border-2' : ''
+                    }`}
+                  >
+                    {/* Drop Target Space (Top/Before) */}
+                    {isDragOver && isDraggingUp && (
+                        <div className={`w-full bg-blue-50 border-2 border-dashed border-blue-400 rounded-xl mb-2 flex items-center justify-center pointer-events-none transition-all ${isCollapsed ? 'h-12' : 'h-24'}`}>
+                            <span className="text-blue-500 font-bold text-sm tracking-wide">Drop Before</span>
+                        </div>
                     )}
-                    <input 
-                      type="text" 
-                      placeholder="Time (e.g. 8:18 AM)" 
-                      value={msg.time}
-                      onChange={(e) => {
-                        const newMsgs = [...messages];
-                        newMsgs[index].time = e.target.value;
-                        setMessages(newMsgs);
-                      }}
-                      className="w-20 border p-1 rounded text-sm shrink-0"
-                    />
-                    <input 
-                      type="text" 
-                      placeholder="React (e.g. ❤️)" 
-                      value={msg.reaction || ''}
-                      onChange={(e) => {
-                        const newMsgs = [...messages];
-                        newMsgs[index].reaction = e.target.value;
-                        setMessages(newMsgs);
-                      }}
-                      className="w-24 border p-1 rounded text-sm shrink-0"
-                    />
-                  </div>
 
-                  <textarea 
-                    placeholder="Message Text..."
-                    value={msg.text}
-                    onChange={(e) => {
-                      const newMsgs = [...messages];
-                      newMsgs[index].text = e.target.value;
-                      setMessages(newMsgs);
-                    }}
-                    className="w-full border p-2 rounded mb-3 text-sm min-h-[50px]"
-                  />
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col space-y-1">
-                      <span className="text-xs font-semibold text-gray-600">Attach Standard Photo:</span>
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, (url) => {
-                          const newMsgs = [...messages];
-                          newMsgs[index].hasImage = true;
-                          newMsgs[index].isSticker = false;
-                          newMsgs[index].imageUrl = url;
-                          setMessages(newMsgs);
-                        })}
-                        className="text-xs bg-white border rounded p-1 w-full"
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-1">
-                      <span className="text-xs font-semibold text-gray-600">Attach Sticker (No bg):</span>
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, (url) => {
-                          const newMsgs = [...messages];
-                          newMsgs[index].hasImage = true;
-                          newMsgs[index].isSticker = true;
-                          newMsgs[index].imageUrl = url;
-                          setMessages(newMsgs);
-                        })}
-                        className="text-xs bg-white border rounded p-1 w-full"
-                      />
-                    </div>
-                  </div>
+                    {/* Main Message Content */}
+                    <div className={`border rounded-xl relative transition-all ${
+                        isDragged ? 'border-transparent' : 'bg-gray-50 border-gray-200 shadow-sm'
+                    } ${
+                        isCollapsed ? 'py-2 px-3 flex items-center' : 'p-4'
+                    }`}>
+                      {isCollapsed ? (
+                        // --- COLLAPSED VIEW ---
+                        <>
+                          <div 
+                            className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-blue-600 p-1 -ml-1 mr-2 rounded transition-colors"
+                            onMouseEnter={() => setDraggableId(msg.id)}
+                            onMouseLeave={() => setDraggableId(null)}
+                            title="Drag to reorder"
+                          >
+                            <Icons.DragHandle />
+                          </div>
+                          <span className="font-bold text-sm text-gray-700 w-24 shrink-0 truncate">Msg {index + 1} ({msg.sender === 'me' ? 'You' : 'Other'})</span>
+                          <span className="text-sm text-gray-500 truncate flex-1 px-3 border-l border-gray-300 ml-2">
+                            {msg.text || (msg.hasImage ? (msg.isSticker ? '[Sticker Attached]' : '[Image Attached]') : '[Empty Message]')}
+                          </span>
+                          <button onClick={() => deleteMessage(msg.id)} className="text-red-400 hover:text-red-700 text-sm font-bold ml-2 p-1 px-2 rounded hover:bg-red-50">✕</button>
+                        </>
+                      ) : (
+                        // --- EXPANDED VIEW (Original) ---
+                        <>
+                          <button onClick={() => deleteMessage(msg.id)} className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-sm font-bold">✕ Remove</button>
+                          
+                          <div className="flex space-x-2 items-center mb-2 flex-wrap gap-y-2 pr-16">
+                            
+                            {/* Drag Handle */}
+                            <div 
+                              className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-blue-600 p-1 -ml-1 rounded transition-colors"
+                              onMouseEnter={() => setDraggableId(msg.id)}
+                              onMouseLeave={() => setDraggableId(null)}
+                              title="Drag to reorder"
+                            >
+                              <Icons.DragHandle />
+                            </div>
 
-                  {msg.sender === 'other' && (
-                    <div className="mt-3 flex flex-col space-y-1 bg-white p-2 rounded border border-blue-100">
-                      <span className="text-xs font-semibold text-blue-600">User's Avatar (Only needed on 1 message per person):</span>
-                      <input 
-                        type="file" 
-                        accept="image/*"
-                        onChange={(e) => handleImageUpload(e, (url) => {
-                          const newMsgs = [...messages];
-                          newMsgs[index].avatarUrl = url;
-                          setMessages(newMsgs);
-                        })}
-                        className="text-xs w-full"
-                      />
+                            <span className="font-bold text-sm text-gray-700 w-20 shrink-0 truncate">Msg {index + 1} ({msg.sender === 'me' ? 'You' : 'Other'})</span>
+                            
+                            {msg.sender === 'other' && (
+                              <input 
+                                type="text" 
+                                placeholder="Sender Name" 
+                                value={msg.senderName}
+                                onChange={(e) => {
+                                  const newMsgs = [...messages];
+                                  newMsgs[index].senderName = e.target.value;
+                                  setMessages(newMsgs);
+                                }}
+                                className="flex-1 border p-1 rounded text-sm font-semibold min-w-[100px]"
+                                style={{ color: getColorForUser(msg.senderName) }} 
+                              />
+                            )}
+                            <input 
+                              type="text" 
+                              placeholder="Time" 
+                              value={msg.time}
+                              onChange={(e) => {
+                                const newMsgs = [...messages];
+                                newMsgs[index].time = e.target.value;
+                                setMessages(newMsgs);
+                              }}
+                              className="w-20 border p-1 rounded text-sm shrink-0"
+                            />
+                            <input 
+                              type="text" 
+                              placeholder="React (e.g. ❤️)" 
+                              value={msg.reaction || ''}
+                              onChange={(e) => {
+                                const newMsgs = [...messages];
+                                newMsgs[index].reaction = e.target.value;
+                                setMessages(newMsgs);
+                              }}
+                              className="w-24 border p-1 rounded text-sm shrink-0"
+                            />
+                          </div>
+
+                          <textarea 
+                            placeholder="Message Text..."
+                            value={msg.text}
+                            onChange={(e) => {
+                              const newMsgs = [...messages];
+                              newMsgs[index].text = e.target.value;
+                              setMessages(newMsgs);
+                            }}
+                            className="w-full border p-2 rounded mb-3 text-sm min-h-[50px]"
+                          />
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-xs font-semibold text-gray-600">Attach Standard Photo:</span>
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, (url) => {
+                                  const newMsgs = [...messages];
+                                  newMsgs[index].hasImage = true;
+                                  newMsgs[index].isSticker = false;
+                                  newMsgs[index].imageUrl = url;
+                                  setMessages(newMsgs);
+                                })}
+                                className="text-xs bg-white border rounded p-1 w-full"
+                              />
+                            </div>
+                            <div className="flex flex-col space-y-1">
+                              <span className="text-xs font-semibold text-gray-600">Attach Sticker (No bg):</span>
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, (url) => {
+                                  const newMsgs = [...messages];
+                                  newMsgs[index].hasImage = true;
+                                  newMsgs[index].isSticker = true;
+                                  newMsgs[index].imageUrl = url;
+                                  setMessages(newMsgs);
+                                })}
+                                className="text-xs bg-white border rounded p-1 w-full"
+                              />
+                            </div>
+                          </div>
+
+                          {msg.sender === 'other' && (
+                            <div className="mt-3 flex flex-col space-y-1 bg-white p-2 rounded border border-blue-100">
+                              <span className="text-xs font-semibold text-blue-600">User's Avatar (Only needed on 1 message per person):</span>
+                              <input 
+                                type="file" 
+                                accept="image/*"
+                                onChange={(e) => handleImageUpload(e, (url) => {
+                                  const newMsgs = [...messages];
+                                  newMsgs[index].avatarUrl = url;
+                                  setMessages(newMsgs);
+                                })}
+                                className="text-xs w-full"
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* Drop Target Space (Bottom/After) */}
+                    {isDragOver && isDraggingDown && (
+                        <div className={`w-full bg-blue-50 border-2 border-dashed border-blue-400 rounded-xl mt-2 flex items-center justify-center pointer-events-none transition-all ${isCollapsed ? 'h-12' : 'h-24'}`}>
+                            <span className="text-blue-500 font-bold text-sm tracking-wide">Drop After</span>
+                        </div>
+                    )}
+                  </div>
+                );
+              })}
 
               {/* Bottom Add Buttons (Convenience Duplicate) */}
               <div className="flex justify-end items-center mt-2 mb-8">
@@ -568,202 +860,205 @@
 
               {/* Chat Body */}
               <div className="flex-1 pl-1 pr-3 pt-3 overflow-y-auto pb-20 relative wa-bg">
-                {groupedMessages.map((block) => {
-                  
-                  // --- PAIRED STICKER RENDER ---
-                  if (block.isPair) {
-                    const { msg1, msg2, index1, index2 } = block;
-                    const isMe = msg1.sender === 'me';
+                {/* Scale Wrapper for the chat contents */}
+                <div id="scale-wrapper" style={{ transform: `scale(${config.chatScale || 1.0})`, transformOrigin: 'top left', width: `${100 / (config.chatScale || 1.0)}%` }}>
+                  {groupedMessages.map((block) => {
                     
-                    let isFirstInGroup = false;
-                    if (index1 === 0) isFirstInGroup = true;
-                    else {
-                      const prev = messages[index1 - 1];
-                      if (prev.sender !== msg1.sender || (!isMe && prev.senderName !== msg1.senderName) || prev.isSticker) isFirstInGroup = true;
-                    }
+                    // --- PAIRED STICKER RENDER ---
+                    if (block.isPair) {
+                      const { msg1, msg2, index1, index2 } = block;
+                      const isMe = msg1.sender === 'me';
+                      
+                      let isFirstInGroup = false;
+                      if (index1 === 0) isFirstInGroup = true;
+                      else {
+                        const prev = messages[index1 - 1];
+                        if (prev.sender !== msg1.sender || (!isMe && prev.senderName !== msg1.senderName) || prev.isSticker) isFirstInGroup = true;
+                      }
 
-                    let isLastInGroup = false;
-                    if (index2 === messages.length - 1) isLastInGroup = true;
-                    else {
-                      const next = messages[index2 + 1];
-                      if (next.sender !== msg2.sender || (!isMe && next.senderName !== msg2.senderName) || next.isSticker) isLastInGroup = true;
-                    }
+                      let isLastInGroup = false;
+                      if (index2 === messages.length - 1) isLastInGroup = true;
+                      else {
+                        const next = messages[index2 + 1];
+                        if (next.sender !== msg2.sender || (!isMe && next.senderName !== msg2.senderName) || next.isSticker) isLastInGroup = true;
+                      }
 
-                    const senderAvatar = !isMe ? getAvatarForSender(msg1.senderName) : null;
-                    const hasReaction = !!msg1.reaction || !!msg2.reaction;
+                      const senderAvatar = !isMe ? getAvatarForSender(msg1.senderName) : null;
+                      const hasReaction = !!msg1.reaction || !!msg2.reaction;
 
-                    return (
-                      <div key={`${msg1.id}-${msg2.id}`} className={`flex ${isMe ? 'justify-end' : 'justify-start items-end'} ${isFirstInGroup ? 'mt-3' : 'mt-1'} ${hasReaction ? 'mb-[14px]' : ''}`}>
-                        {/* Avatar Render */}
-                        {!isMe && (
-                          <div className="w-[30px] h-[30px] rounded-full overflow-hidden mr-1.5 shrink-0 mb-0.5">
-                            {isLastInGroup && (
-                              senderAvatar ? <img src={senderAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-transparent"></div>
-                            )}
-                          </div>
-                        )}
-                        <div className="flex flex-col max-w-[80%]">
-                          {/* Sticker Pair Colored Name Header */}
-                          {!isMe && isFirstInGroup && (
-                            <div 
-                              className="text-[13px] font-medium leading-none bg-white shadow-[0_1px_1px_rgba(0,0,0,0.1)] rounded-full px-2.5 py-1.5 mb-0.5 w-max"
-                              style={{ color: getColorForUser(msg1.senderName) }}
-                            >
-                              {msg1.senderName}
+                      return (
+                        <div key={`${msg1.id}-${msg2.id}`} className={`flex ${isMe ? 'justify-end' : 'justify-start items-end'} ${isFirstInGroup ? 'mt-3' : 'mt-1'} ${hasReaction ? 'mb-[14px]' : ''}`}>
+                          {/* Avatar Render */}
+                          {!isMe && (
+                            <div className="w-[30px] h-[30px] rounded-full overflow-hidden mr-1.5 shrink-0 mb-0.5">
+                              {isLastInGroup && (
+                                senderAvatar ? <img src={senderAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-transparent"></div>
+                              )}
                             </div>
                           )}
-                          <div className="flex flex-row space-x-1.5 relative">
-                            {/* Sticker 1 */}
-                            <div className="flex flex-col">
-                              <div className="relative">
-                                <img src={msg1.imageUrl} alt="sticker" className="w-[110px] h-[110px] object-contain drop-shadow-md" />
-                                {msg1.reaction && (
-                                  <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
-                                    {msg1.reaction}
-                                  </div>
-                                )}
+                          <div className="flex flex-col max-w-[80%]">
+                            {/* Sticker Pair Colored Name Header */}
+                            {!isMe && isFirstInGroup && (
+                              <div 
+                                className="text-[13px] font-medium leading-none bg-white shadow-[0_1px_1px_rgba(0,0,0,0.1)] rounded-full px-2.5 py-1.5 -mb-2 relative z-10 w-max"
+                                style={{ color: getColorForUser(msg1.senderName) }}
+                              >
+                                {msg1.senderName}
                               </div>
-                              <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] mt-1`}>
-                                <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg1.time}</span>
-                                {isMe && <Tick status={msg1.status} />}
+                            )}
+                            <div className="flex flex-row space-x-1.5 relative">
+                              {/* Sticker 1 */}
+                              <div className="flex flex-col">
+                                <div className="relative">
+                                  <img src={msg1.imageUrl} alt="sticker" className="w-[110px] h-[110px] object-contain drop-shadow-md" />
+                                  {msg1.reaction && (
+                                    <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
+                                      {msg1.reaction}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] -mt-1.5 relative z-10`}>
+                                  <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg1.time}</span>
+                                  {isMe && <Tick status={msg1.status} />}
+                                </div>
                               </div>
-                            </div>
-                            {/* Sticker 2 */}
-                            <div className="flex flex-col">
-                              <div className="relative">
-                                <img src={msg2.imageUrl} alt="sticker" className="w-[110px] h-[110px] object-contain drop-shadow-md" />
-                                {msg2.reaction && (
-                                  <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
-                                    {msg2.reaction}
-                                  </div>
-                                )}
-                              </div>
-                              <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] mt-1`}>
-                                <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg2.time}</span>
-                                {isMe && <Tick status={msg2.status} />}
+                              {/* Sticker 2 */}
+                              <div className="flex flex-col">
+                                <div className="relative">
+                                  <img src={msg2.imageUrl} alt="sticker" className="w-[110px] h-[110px] object-contain drop-shadow-md" />
+                                  {msg2.reaction && (
+                                    <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
+                                      {msg2.reaction}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] -mt-1.5 relative z-10`}>
+                                  <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg2.time}</span>
+                                  {isMe && <Tick status={msg2.status} />}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  } 
-                  
-                  // --- SINGLE MESSAGE / SINGLE STICKER RENDER ---
-                  else {
-                    const { msg, index } = block;
-                    const isMe = msg.sender === 'me';
+                      );
+                    } 
                     
-                    let isFirstInGroup = false;
-                    if (index === 0) {
-                      isFirstInGroup = true;
-                    } else {
-                      const prev = messages[index - 1];
-                      if (prev.sender !== msg.sender || (!isMe && prev.senderName !== msg.senderName)) {
+                    // --- SINGLE MESSAGE / SINGLE STICKER RENDER ---
+                    else {
+                      const { msg, index } = block;
+                      const isMe = msg.sender === 'me';
+                      
+                      let isFirstInGroup = false;
+                      if (index === 0) {
                         isFirstInGroup = true;
-                      } else if (msg.isSticker || prev.isSticker) {
-                        isFirstInGroup = true;
+                      } else {
+                        const prev = messages[index - 1];
+                        if (prev.sender !== msg.sender || (!isMe && prev.senderName !== msg.senderName)) {
+                          isFirstInGroup = true;
+                        } else if (msg.isSticker || prev.isSticker) {
+                          isFirstInGroup = true;
+                        }
                       }
-                    }
 
-                    let isLastInGroup = false;
-                    if (index === messages.length - 1) {
-                      isLastInGroup = true;
-                    } else {
-                      const next = messages[index + 1];
-                      if (next.sender !== msg.sender || (!isMe && next.senderName !== msg.senderName)) {
+                      let isLastInGroup = false;
+                      if (index === messages.length - 1) {
                         isLastInGroup = true;
-                      } else if (msg.isSticker || next.isSticker) {
-                        isLastInGroup = true;
+                      } else {
+                        const next = messages[index + 1];
+                        if (next.sender !== msg.sender || (!isMe && next.senderName !== msg.senderName)) {
+                          isLastInGroup = true;
+                        } else if (msg.isSticker || next.isSticker) {
+                          isLastInGroup = true;
+                        }
                       }
-                    }
-                    
-                    const senderAvatar = !isMe ? getAvatarForSender(msg.senderName) : null;
-                    const bubblePadding = msg.isSticker ? '' : (msg.hasImage ? (msg.text ? 'p-1 pb-1.5' : 'p-1 pb-1') : 'px-3 pt-2 pb-1.5');
-                    const hasReaction = !!msg.reaction;
+                      
+                      const senderAvatar = !isMe ? getAvatarForSender(msg.senderName) : null;
+                      const bubblePadding = msg.isSticker ? '' : (msg.hasImage ? (msg.text ? 'p-1 pb-1.5' : 'p-1 pb-1') : 'px-3 pt-2 pb-1.5');
+                      const hasReaction = !!msg.reaction;
 
-                    return (
-                      <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start items-end'} ${isFirstInGroup ? 'mt-3' : 'mt-1'} ${hasReaction ? 'mb-[14px]' : ''}`}>
-                        {/* Avatar Render */}
-                        {!isMe && (
-                          <div className="w-[30px] h-[30px] rounded-full overflow-hidden mr-1.5 shrink-0 mb-0.5">
-                            {isLastInGroup && (
-                              senderAvatar ? <img src={senderAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-transparent"></div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Message Bubble Wrapper - All 4 corners rounded */}
-                        <div className={`max-w-[75%] relative flex flex-col ${msg.isSticker ? 'bg-transparent' : (isMe ? 'bg-[#DCF7C5]' : 'bg-white')} ${!msg.isSticker ? `shadow-sm rounded-[12px] ${bubblePadding}` : ''}`}>
-                          
-                          {/* Dynamic Colored Name Header */}
-                          {!isMe && isFirstInGroup && (
-                            <div 
-                              className={`text-[14px] font-medium leading-none ${msg.isSticker ? 'bg-white shadow-[0_1px_1px_rgba(0,0,0,0.1)] rounded-full px-2.5 py-1.5 mb-1 w-max text-[13px]' : `mb-1 ${msg.hasImage ? 'ml-[8px] mt-[4px]' : ''}`}`}
-                              style={{ color: getColorForUser(msg.senderName) }}
-                            >
-                              {msg.senderName}
-                            </div>
-                          )}
-
-                          {/* Standard Photo */}
-                          {!msg.isSticker && msg.hasImage && msg.imageUrl && (
-                            <div className="relative">
-                              <img src={msg.imageUrl} alt="attached" className={`w-full max-h-56 object-cover rounded-[8px] ${msg.text ? 'mb-1' : ''}`} />
-                              {/* Overlay time if no text is provided */}
-                              {!msg.text && (
-                                <div className="absolute bottom-1 right-1.5 bg-black/30 text-white text-[11px] px-[6px] py-[3px] rounded-full flex items-center drop-shadow-sm">
-                                  <span>{msg.time}</span>
-                                  {isMe && <div className="flex"><Tick status={msg.status} isOverlay={true} /></div>}
-                                </div>
+                      return (
+                        <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start items-end'} ${isFirstInGroup ? 'mt-3' : 'mt-1'} ${hasReaction ? 'mb-[14px]' : ''}`}>
+                          {/* Avatar Render */}
+                          {!isMe && (
+                            <div className="w-[30px] h-[30px] rounded-full overflow-hidden mr-1.5 shrink-0 mb-0.5">
+                              {isLastInGroup && (
+                                senderAvatar ? <img src={senderAvatar} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-transparent"></div>
                               )}
                             </div>
                           )}
 
-                          {/* Sticker Rendering */}
-                          {msg.isSticker && msg.hasImage && msg.imageUrl && (
-                            <div className="flex flex-col">
+                          {/* Message Bubble Wrapper - All 4 corners rounded */}
+                          <div className={`max-w-[75%] relative flex flex-col ${msg.isSticker ? 'bg-transparent' : (isMe ? 'bg-[#DCF7C5]' : 'bg-white')} ${!msg.isSticker ? `shadow-sm rounded-[12px] ${bubblePadding}` : ''}`}>
+                            
+                            {/* Dynamic Colored Name Header */}
+                            {!isMe && isFirstInGroup && (
+                              <div 
+                                className={`text-[14px] font-medium leading-none ${msg.isSticker ? 'bg-white shadow-[0_1px_1px_rgba(0,0,0,0.1)] rounded-full px-2.5 py-1.5 -mb-2 relative z-10 w-max text-[13px]' : `mb-1 ${msg.hasImage ? 'ml-[8px] mt-[4px]' : ''}`}`}
+                                style={{ color: getColorForUser(msg.senderName) }}
+                              >
+                                {msg.senderName}
+                              </div>
+                            )}
+
+                            {/* Standard Photo */}
+                            {!msg.isSticker && msg.hasImage && msg.imageUrl && (
                               <div className="relative">
-                                <img src={msg.imageUrl} alt="sticker" className="w-[130px] h-[130px] object-contain drop-shadow-md" />
-                                {msg.reaction && (
-                                  <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
-                                    {msg.reaction}
+                                <img src={msg.imageUrl} alt="attached" className={`w-full max-h-56 object-cover rounded-[8px] ${msg.text ? 'mb-1' : ''}`} />
+                                {/* Overlay time if no text is provided */}
+                                {!msg.text && (
+                                  <div className="absolute bottom-1 right-1.5 bg-black/30 text-white text-[11px] px-[6px] py-[3px] rounded-full flex items-center drop-shadow-sm">
+                                    <span>{msg.time}</span>
+                                    {isMe && <div className="flex"><Tick status={msg.status} isOverlay={true} /></div>}
                                   </div>
                                 )}
                               </div>
-                              <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] mt-1`}>
-                                <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg.time}</span>
-                                {isMe && <Tick status={msg.status} />}
-                              </div>
-                            </div>
-                          )}
+                            )}
 
-                          {/* Standard Text Rendering (With Mentions) */}
-                          {!msg.isSticker && msg.text && (
-                            <div className={`relative min-w-[70px] ${msg.hasImage ? 'px-1 pb-1' : ''}`}>
-                              <span className="text-[16px] text-black leading-[1.35] tracking-[-0.4px] whitespace-pre-wrap inline break-words mr-1">
-                                {renderTextWithMentions(msg.text)}
-                              </span>
-                              <div className="inline-flex items-center justify-end text-[11px] text-gray-500 float-right ml-1 mt-[5px] h-[15px]">
-                                <span className="mt-[1px]">{msg.time}</span>
-                                {isMe && <Tick status={msg.status} />}
+                            {/* Sticker Rendering */}
+                            {msg.isSticker && msg.hasImage && msg.imageUrl && (
+                              <div className="flex flex-col">
+                                <div className="relative">
+                                  <img src={msg.imageUrl} alt="sticker" className="w-[130px] h-[130px] object-contain drop-shadow-md" />
+                                  {msg.reaction && (
+                                    <div className="absolute -bottom-1.5 right-1 bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center">
+                                      {msg.reaction}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className={`flex items-center ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'} text-[11px] -mt-1.5 relative z-10`}>
+                                  <span className={`${!isMe ? 'bg-white/90 shadow-sm px-1.5 py-[2px] rounded-full text-gray-500' : 'bg-white/50 px-1.5 py-[2px] rounded-full shadow-sm text-gray-500'}`}>{msg.time}</span>
+                                  {isMe && <Tick status={msg.status} />}
+                                </div>
                               </div>
-                              <div className="clear-both"></div>
-                            </div>
-                          )}
-                          
-                          {/* Standard Bubble Reaction */}
-                          {!msg.isSticker && msg.reaction && (
-                            <div className={`absolute -bottom-3 ${isMe ? 'right-1' : 'right-1'} bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center`}>
-                              {msg.reaction}
-                            </div>
-                          )}
+                            )}
 
+                            {/* Standard Text Rendering (With Mentions) */}
+                            {!msg.isSticker && msg.text && (
+                              <div className={`relative min-w-[70px] ${msg.hasImage ? 'px-1 pb-1' : ''}`}>
+                                <span className="text-[16px] text-black leading-[1.35] tracking-[-0.4px] whitespace-pre-wrap inline break-words mr-1">
+                                  {renderTextWithMentions(msg.text)}
+                                </span>
+                                <div className="inline-flex items-center justify-end text-[11px] text-gray-500 float-right ml-1 mt-[5px] h-[15px]">
+                                  <span className="mt-[1px]">{msg.time}</span>
+                                  {isMe && <Tick status={msg.status} />}
+                                </div>
+                                <div className="clear-both"></div>
+                              </div>
+                            )}
+                            
+                            {/* Standard Bubble Reaction */}
+                            {!msg.isSticker && msg.reaction && (
+                              <div className={`absolute -bottom-3 ${isMe ? 'right-1' : 'right-1'} bg-white shadow-sm border border-gray-200 rounded-full px-1.5 py-[2px] text-[13px] leading-none z-10 min-w-[24px] text-center`}>
+                                {msg.reaction}
+                              </div>
+                            )}
+
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }
-                })}
+                      );
+                    }
+                  })}
+                </div>
               </div>
 
               {/* Input Area */}
