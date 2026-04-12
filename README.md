@@ -6,11 +6,9 @@ A completely local, zero-install, single-file web application for generating pix
 
 Built with React and Tailwind CSS, this tool runs entirely in your browser without any backend server. Everything stays on your local machine, ensuring complete privacy.
 
-## 📸 Editor Previews
+## 📸 Editor Preview
 
 ![WhatsApp Mockup Editor - Dark Mode](Example1.jpg)
-
-![WhatsApp Mockup Editor - Light Mode](Example2.jpg)
 
 ## ✨ Key Features
 
@@ -41,16 +39,22 @@ When you are ready to share your mockup, click **Export HTML** to choose from th
 **1. Interactive Scroll**
 A fixed-size iPhone frame centered on the screen. Users can physically scroll *inside* the phone to read the chat. Perfect for hosting on a free site and sharing via QR code.
 
+![Interactive Export Preview](placeholder-interactive.jpg)
+
 **2. Full Length Capture**
 Unlocks the scroll height and stretches the iPhone frame downward to fit the entire chat. Perfect for using a Chrome Extension to take one massive, high-res full-page screenshot.
+
+![Full Capture Export Preview](placeholder-fullcapture.jpg)
 
 **3. Paginated Storyboard**
 Automatically measures your chat and breaks it into uniform, side-by-side screens. Includes a built-in **Preflight Overlay** so you can preview your page breaks before downloading. Perfect for presentation slides or print layout.
 
+![Storyboard Export Preview](placeholder-storyboard.jpg)
+
 ## 🚀 How to Use
 
 1. **Use the Live Link:** Just click the link at the top of this page to use the app instantly! 
-2. **Or Run Locally:** Since the app is entirely self-contained, you can simply copy the raw code from `index.html`, paste it into a blank text file on your computer, save it as `index.html`, and double-click it to open in any web browser.
+2. **Or Run Locally:** Since the app is entirely self-contained, you can simply copy the raw code from `index.html`, paste it into a blank text file on your computer, save it as `index.html`, and double-click it to open in any web browser (the other files in this repository are just examples!).
 3. **Customize:** Use the left panel to configure the chat header, time, battery/network status, and add messages.
 4. **Reorder:** Toggle "Collapse All" to easily drag-and-drop messages into your preferred order.
 5. **Preview:** Watch the right panel update live.
