@@ -1,6 +1,6 @@
 # 💬 Local WhatsApp Mockup Editor (iOS Edition)
 
-**👉 [Try it live in your browser here!](https://shl0402.github.io/fake-whatsapp-UI-chat-IOS-/) 👈**
+**👉 [Try it live in your browser here!](https://shl0402.github.io/whatsapp-UI-mockup-chat-IOS-/) 👈**
 
 A completely local, zero-install, single-file web application for generating pixel-perfect, highly authentic iOS WhatsApp chat mockups. 
 
